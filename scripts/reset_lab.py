@@ -11,6 +11,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "data" / "baseline"
 INCOMING = ROOT / "data" / "incoming"
+HISTORY = ROOT / "data" / "history" / "metrics_history.csv"
 
 
 def shift_dataframe_timestamps(df: pd.DataFrame, columns: list[str], target_age_minutes: int = 5) -> pd.DataFrame:
@@ -30,9 +31,42 @@ def shift_dataframe_timestamps(df: pd.DataFrame, columns: list[str], target_age_
     return df
 
 
+def select_healthy_weekday_volume(
+    df: pd.DataFrame,
+    history: pd.DataFrame,
+    *,
+    day_of_week: int,
+) -> pd.DataFrame:
+    """Size the reset batch to the historical median for the current weekday.
+
+    The generated history intentionally has lower weekend traffic. Keeping all
+    600 baseline rows while only re-anchoring timestamps made ``make reset``
+    report a false volume incident on weekends.
+    """
+    if "day_of_week" not in history or "row_count" not in history:
+        return df.copy()
+    same_weekday = pd.to_numeric(
+        history.loc[history["day_of_week"] == day_of_week, "row_count"],
+        errors="coerce",
+    ).dropna()
+    if same_weekday.empty:
+        return df.copy()
+
+    target_rows = max(1, int(round(float(same_weekday.median()))))
+    target_rows = min(len(df), target_rows)
+    return df.iloc[:target_rows].copy()
+
+
 def main() -> None:
     INCOMING.mkdir(parents=True, exist_ok=True)
     orders = pd.read_csv(BASE / "orders.csv")
+    history = pd.read_csv(HISTORY)
+    current_weekday = datetime.now(timezone.utc).weekday()
+    orders = select_healthy_weekday_volume(
+        orders,
+        history,
+        day_of_week=current_weekday,
+    )
     orders = shift_dataframe_timestamps(orders, ["created_at", "updated_at"], target_age_minutes=5)
     orders.to_csv(INCOMING / "orders.csv", index=False)
 
@@ -59,7 +93,10 @@ def main() -> None:
     metrics = ROOT / "reports" / "latest_metrics.json"
     if metrics.exists():
         metrics.unlink()
-    print("Lab reset to a healthy baseline.")
+    print(
+        "Lab reset to a healthy baseline "
+        f"({len(orders)} orders for weekday={current_weekday})."
+    )
 
 
 if __name__ == "__main__":

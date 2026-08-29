@@ -9,9 +9,12 @@ slo:
   rag_index_freshness:
     target: 0.99
     threshold_minutes: 60
+  multiwindow:
+    short_window_burn_threshold: 14.4
+    long_window_burn_threshold: 6.0
 
 anomaly:
-  default_method: zscore
+  default_method: auto
   zscore_threshold: 3.0
   mean_ratio_threshold: 3.0
 

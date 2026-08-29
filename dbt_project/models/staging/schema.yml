@@ -11,6 +11,10 @@ models:
       - name: customer_id
         data_tests:
           - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
       - name: currency
         data_tests:
           - accepted_values:
@@ -27,3 +31,9 @@ models:
       - name: customer_id
         data_tests:
           - not_null
+      - name: is_active
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true, false]
